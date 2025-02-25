@@ -20,6 +20,6 @@ SCROLL_PROBABILITY = 0.7  # Probability of scrolling on a page
 
 # URLs to process
 TARGET_URLS = [
-    "https://www.linkedin.com/school/stanford-university/",
+    "https://www.linkedin.com/school/stanford-university/people/?keywords=angel%20investor",
     # Add more URLs as needed
 ]
