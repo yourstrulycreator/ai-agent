@@ -129,6 +129,11 @@ class DataExtractor:
                             name = name_el.inner_text().strip() if name_el else ""
                             title = title_el.inner_text().strip() if title_el else ""
                             
+                            # Enhanced organization detection - check if this is an organization rather than a person
+                            if self._is_organization(name, title, container):
+                                print(f"Skipping organization: {name}")
+                                continue
+                            
                             # Look for company/occupation information
                             company_selectors = [
                                 ".search-result__info .subline-level-2", 
@@ -159,29 +164,32 @@ class DataExtractor:
                                     if "/in/" in url:
                                         break
                             
-                            # Filter out entries that don't look like people
-                            if name and not any(term in name.lower() for term in ["university", "school", "online", "follow"]):
-                                # Split name into first and last
-                                name_parts = name.split()
-                                first_name = name_parts[0] if name_parts else ""
-                                last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
-                                
-                                profile = {
-                                    "first_name": first_name,
-                                    "last_name": last_name,
-                                    "title": title,
-                                    "employer": company,  # Initial employer from list view
-                                    "linkedin_url": url,
-                                    "timestamp": datetime.now().isoformat()
-                                }
-                                
-                                all_profiles.append(profile)
-                                
-                                # Save URL for detailed profile visit if available
-                                if url and "/in/" in url:
-                                    profile_urls.append((len(all_profiles) - 1, url))  # Store index and URL
-                                
-                                print(f"Extracted profile {i}: {name} - {title}")
+                            # Additional check to make sure this is a person profile not an organization
+                            if not self._is_valid_profile(name, url):
+                                print(f"Skipping invalid profile: {name}")
+                                continue
+                            
+                            # Split name into first and last
+                            name_parts = name.split()
+                            first_name = name_parts[0] if name_parts else ""
+                            last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+                            
+                            profile = {
+                                "first_name": first_name,
+                                "last_name": last_name,
+                                "title": title,
+                                "employer": company,  # Initial employer from list view
+                                "linkedin_url": url,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            
+                            all_profiles.append(profile)
+                            
+                            # Save URL for detailed profile visit if available
+                            if url and "/in/" in url:
+                                profile_urls.append((len(all_profiles) - 1, url))  # Store index and URL
+                            
+                            print(f"Extracted profile {i}: {name} - {title}")
                         except Exception as e:
                             print(f"Error extracting profile {i}: {e}")
                     
@@ -247,6 +255,68 @@ class DataExtractor:
             print(f"Error in profile extraction: {e}")
             return []
 
+    def _is_organization(self, name, title, container):
+        """
+        Determine if a profile is an organization rather than a person.
+        
+        Args:
+            name (str): Name text extracted from profile
+            title (str): Title or subtitle text
+            container: The HTML container element
+            
+        Returns:
+            bool: True if it's an organization, False if it's a person
+        """
+        # Organization indicator keywords
+        org_keywords = [
+            "university", "school", "college", "academy", "institute", 
+            "department", "corporation", "inc", "llc", "ltd", "company",
+            "organization", "organisation", "foundation", "association",
+            "society", "group", "agency", "bureau", "office", "ministry",
+            "committee", "council", "board", "authority", "commission",
+            "global", "international", "national", "federal", "state", 
+            "enterprise", "ventures", "partners", "industries", "solutions",
+            "systems", "technologies", "services", "platform", "network"
+        ]
+        
+        # Organization patterns in name
+        if any(keyword in name.lower() for keyword in org_keywords):
+            return True
+            
+        # Check for "Follow" button which often appears for organizations but not people
+        follow_el = container.query_selector("button:has-text('Follow')")
+        if follow_el:
+            return True
+            
+        # Organizations often have "followers" count but not connection info
+        followers_el = container.query_selector("*:has-text('followers')")
+        connections_el = container.query_selector("*:has-text('connection')")
+        if followers_el and not connections_el:
+            return True
+            
+        # Check name patterns - real people typically have 2-3 words in name
+        name_parts = name.split()
+        if len(name_parts) > 4 or len(name_parts) == 1:
+            # Organizations often have very long names or single word names
+            return True
+            
+        # Check for lack of typical person attributes
+        if not title or title.lower() in org_keywords:
+            # Organizations often lack job titles or have org-like titles
+            return True
+            
+        # Check URL pattern if available
+        link_el = container.query_selector("a[href*='/company/']")
+        if link_el:
+            return True
+            
+        # Look for logo images which are common in org profiles
+        logo_el = container.query_selector("img[alt*='logo']")
+        if logo_el:
+            return True
+            
+        return False
+
     def _extract_detailed_employer(self):
         """Extract detailed employer information from a profile page"""
         try:
@@ -307,6 +377,11 @@ class DataExtractor:
             title = title_el.inner_text() if title_el else ""
             company = company_el.inner_text() if company_el else ""
             
+            # Skip if this looks like an organization
+            if self._is_organization(name, title, container):
+                print(f"Skipping organization in container {index}: {name}")
+                return {}
+            
             # Debug info
             print(f"Profile {index}: Name={name}, Title={title}, Company={company}")
             
@@ -365,6 +440,11 @@ class DataExtractor:
                                 name = texts[0]
                                 title = texts[1]
                                 company = texts[2] if len(texts) > 2 else ""
+                                
+                                # Skip if this looks like an organization
+                                if self._is_organization(name, title, element):
+                                    print(f"Skipping organization in fallback: {name}")
+                                    continue
                                 
                                 # Split name into first and last
                                 name_parts = name.split()
@@ -431,19 +511,43 @@ class DataExtractor:
         if not name:
             return False
             
-        # Filter out entries with organizational keywords
-        org_keywords = ["university", "school", "online", "follow", "group", 
-                    "department", "subsidiary", "service", "learning", "followers"]
+        # Expanded list of organization keywords to filter out
+        org_keywords = [
+            "university", "school", "college", "online", "follow", "group", 
+            "department", "subsidiary", "service", "learning", "followers",
+            "academy", "institute", "corporation", "inc", "llc", "ltd", 
+            "company", "organization", "organisation", "foundation", 
+            "association", "society", "agency", "bureau", "office", 
+            "ministry", "committee", "council", "board", "authority", 
+            "commission", "global", "international", "national", "federal", 
+            "enterprise", "ventures", "partners", "industries", "solutions",
+            "systems", "technologies", "services", "platform", "network"
+        ]
         
-        if any(keyword in name.lower() for keyword in org_keywords):
+        # Check for organization keywords in the name
+        if any(keyword.lower() in name.lower() for keyword in org_keywords):
+            return False
+            
+        # Check for unusual name patterns (people typically have 2-3 name parts)
+        name_parts = name.split()
+        if len(name_parts) > 4 or len(name_parts) < 2:
             return False
             
         # Check URL pattern for LinkedIn profile
-        if url and not "/in/" in url:
-            return False
-            
+        if url:
+            if "/company/" in url:
+                return False
+            if "/school/" in url:
+                return False
+            if not "/in/" in url and not "/pub/" in url:
+                return False
+                
         # Check for reasonable name length and structure
         if len(name.strip()) < 3 or len(name.split()) > 5:
+            return False
+            
+        # Basic name pattern check (most names don't have special characters)
+        if any(char in name for char in ["@", "&", "|", "/"]):
             return False
             
         return True
@@ -514,8 +618,13 @@ class DataExtractor:
                                     title = title_el.inner_text().strip()
                                     break
                             
-                            # Only add if we found at least a name
-                            if name:
+                            # Skip if this looks like an organization
+                            if self._is_organization(name, title, element):
+                                print(f"Skipping organization in direct search: {name}")
+                                continue
+                                
+                            # Only add if we found at least a name and it passes validation
+                            if name and self._is_valid_profile(name, url):
                                 # Split name into first and last
                                 name_parts = name.split()
                                 first_name = name_parts[0] if name_parts else ""
