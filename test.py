@@ -35,6 +35,22 @@ def test_ai_controller():
         selector = ai.identify_elements(sample_content, "name")
         print(f"Selector for 'name': {selector}")
         
+        print("\nTesting profile container analysis...")
+        sample_alumni_content = """
+        <div class="artdeco-entity-lockup">
+            <div class="artdeco-entity-lockup__title">Jane Doe</div>
+            <div class="artdeco-entity-lockup__subtitle">Product Manager</div>
+            <div class="artdeco-entity-lockup__caption">Tech Company</div>
+        </div>
+        <div class="artdeco-entity-lockup">
+            <div class="artdeco-entity-lockup__title">Bob Smith</div>
+            <div class="artdeco-entity-lockup__subtitle">Software Engineer</div>
+            <div class="artdeco-entity-lockup__caption">Startup Inc</div>
+        </div>
+        """
+        container_analysis = ai.analyze_profile_containers(sample_alumni_content)
+        print(f"Container analysis: {container_analysis}")
+        
         print("\nAI Controller test completed successfully")
         return True
         
@@ -76,8 +92,8 @@ def test_browser_agent():
         print(f"Browser Agent test failed: {e}")
         return False
 
-def test_data_extraction(url=None):
-    """Test data extraction from a LinkedIn page"""
+def test_data_extraction(url="https://www.linkedin.com/school/stanford-university/people/?keywords=angel%20investor"):
+    """Test data extraction from a LinkedIn page with improved validation"""
     print("\n== Testing People Data Extraction ==")
     
     if not url:
@@ -105,20 +121,43 @@ def test_data_extraction(url=None):
             print(f"\nExtracting data from: {url}")
             people_data = extractor.extract_people_data(url)
             
-            # Display extracted data
-            print("\nExtracted people data:")
+            # Validate extracted data
+            valid_profiles = []
+            invalid_profiles = []
+            
             for profile in people_data:
-                print(f"  Name: {profile['first_name']} {profile['last_name']}, Title: {profile['title']}, Employer: {profile['employer']}")
+                full_name = f"{profile['first_name']} {profile['last_name']}".strip()
+                
+                if extractor._is_valid_profile(full_name, profile.get('linkedin_url', '')):
+                    valid_profiles.append(profile)
+                else:
+                    invalid_profiles.append(profile)
             
-            # Save to test files
-            test_csv = "test__data.csv"
-            test_json = "test_data.json"
-            extractor.save_to_csv(people_data, test_csv)
-            extractor.save_to_json(people_data, test_json)
-            print(f"\nData saved to {test_csv} and {test_json}")
+            # Display validation results
+            print(f"\nValid profiles extracted: {len(valid_profiles)}")
+            print(f"Invalid profiles filtered out: {len(invalid_profiles)}")
             
-            print("\nPeople Data Extraction test completed successfully")
-            return True
+            # Display extracted data
+            if valid_profiles:
+                print("\nExtracted people data:")
+                for profile in valid_profiles[:5]:  # Show first 5 profiles
+                    print(f"  Name: {profile['first_name']} {profile['last_name']}, Title: {profile['title']}, Employer: {profile['employer']}")
+                
+                if len(valid_profiles) > 5:
+                    print(f"  ... and {len(valid_profiles) - 5} more profiles")
+                
+                # Save to test files
+                test_csv = "test_data.csv"
+                test_json = "test_data.json"
+                extractor.save_to_csv(valid_profiles, test_csv)
+                extractor.save_to_json(valid_profiles, test_json)
+                print(f"\nData saved to {test_csv} and {test_json}")
+                
+                print("\nPeople Data Extraction test completed successfully")
+                return True
+            else:
+                print("No valid profiles were extracted.")
+                return False
             
         finally:
             # Always close the browser

@@ -90,58 +90,101 @@ class BrowserAgent:
                 print(f"Error loading session: {e}")
         return False
         
-    def login(self, username, password):
-        """Log in to LinkedIn"""
-        # First check if we're already logged in by visiting the feed page
-        self.page.goto('https://www.linkedin.com/feed/')
-        self.human.delay()
-        
-        # If we're already on the feed, we're logged in
-        if self.page.url.startswith('https://www.linkedin.com/feed'):
-            print("Already logged in")
-            return True
-            
-        # Otherwise, go to login page
-        self.page.goto('https://www.linkedin.com/login')
-        self.human.delay()
-        
-        # Check if we're on the login page
-        if self.page.query_selector('#username'):
-            # Fill in login details
-            self.human.type_text(self.page, '#username', username)
-            self.human.delay()
-            self.human.type_text(self.page, '#password', password)
-            self.human.delay()
-            
-            # Click sign in
-            self.human.click(self.page, 'button[type="submit"]')
-            self.human.delay(3, 5)  # Longer delay for login
-            
-            # Check if login was successful
-            if self.page.url.startswith('https://www.linkedin.com/feed'):
-                print("Login successful")
-                # Save session for future use
-                self._save_session()
-                return True
-            else:
-                print("Login may have failed. Current URL:", self.page.url)
+    def login(self, username, password, max_retries=3):
+        """Log in to LinkedIn with improved error handling and retry logic"""
+        for attempt in range(max_retries):
+            try:
+                print(f"Login attempt {attempt+1}/{max_retries}")
                 
+                # First check if we're already logged in by visiting the feed page
+                self.page.goto('https://www.linkedin.com/feed/', timeout=30000)
+                self.human.delay()
+                
+                # If we're already on the feed, we're logged in
+                if self.page.url.startswith('https://www.linkedin.com/feed'):
+                    print("Already logged in")
+                    return True
+                    
+                # Otherwise, go to login page
+                self.page.goto('https://www.linkedin.com/login', timeout=30000)
+                self.human.delay(2, 4)  # Longer delay to ensure page loads
+                
+                # Take screenshot for debugging
+                self.take_screenshot(f"login_page_attempt_{attempt+1}.png")
+                
+                # Check if we're on the login page
+                username_selector = '#username'
+                password_selector = '#password'
+                submit_selector = 'button[type="submit"]'
+                
+                # Wait for selectors to be visible
+                print("Waiting for login form elements...")
+                self.page.wait_for_selector(username_selector, timeout=10000)
+                
+                # Clear fields first (in case there's text already)
+                self.page.fill(username_selector, "")
+                self.human.delay(0.5, 1)
+                self.page.fill(password_selector, "")
+                self.human.delay(0.5, 1)
+                
+                # Fill in login details with human-like behavior
+                print(f"Entering username: {username}")
+                self.human.type_text(self.page, username_selector, username)
+                self.human.delay(1, 2)
+                
+                print(f"Entering password")
+                self.human.type_text(self.page, password_selector, password)
+                self.human.delay(1, 2)
+                
+                # Check if fields are filled properly
+                entered_username = self.page.input_value(username_selector)
+                if not entered_username:
+                    print("Username field appears to be empty. Retrying...")
+                    continue
+                    
+                # Click sign in
+                print("Clicking sign in button")
+                self.human.click(self.page, submit_selector)
+                
+                # Wait longer for login to complete
+                self.human.delay(5, 8)
+                
+                # Take another screenshot to see where we are
+                self.take_screenshot(f"after_login_attempt_{attempt+1}.png")
+                
+                # Check if login was successful
+                if self.page.url.startswith('https://www.linkedin.com/feed'):
+                    print("Login successful")
+                    # Save session for future use
+                    self._save_session()
+                    return True
+                
+                # Check for different error scenarios
+                if "error" in self.page.url.lower() or "challenge" in self.page.url.lower():
+                    print(f"Login error detected. Current URL: {self.page.url}")
+                    
+                # Check for empty fields error
+                error_text = self.page.text_content('.alert.error') or ""
+                if "enter an email" in error_text.lower() or "enter a password" in error_text.lower():
+                    print(f"Empty field error detected: {error_text}")
+                    continue  # Retry login
+                    
+                # Check for incorrect credentials
+                if "that's not the right password" in self.page.content().lower():
+                    print("Incorrect password detected")
+                    return False  # Don't retry with same wrong credentials
+                    
                 # Check for captcha or security verification
                 if "checkpoint" in self.page.url or self.page.query_selector('input[name="pin"]'):
-                    print("SECURITY VERIFICATION REQUIRED: Please complete it manually")
-                    # Give time for manual verification (2 minutes)
-                    self.human.delay(120, 120)
-                    
-                    # Check if verification was successful
-                    if self.page.url.startswith('https://www.linkedin.com/feed'):
-                        print("Verification successful")
-                        self._save_session()
-                        return True
+                    print("Security verification required. Please complete the captcha.")
+                    return False  # Can't proceed without user intervention
                 
-                return False
-        else:
-            print("Already logged in or login page not available")
-            return False
+            except Exception as e:
+                print(f"An error occurred during login attempt: {e}")
+                continue  # Retry on error
+                
+        print("Max login attempts reached. Please check your credentials or account status.")
+        return False  # Failed to log in after max retries
         
     def navigate_to(self, url, max_retries=3):
         """Navigate to a LinkedIn page with retry logic"""

@@ -55,27 +55,35 @@ class AIController:
                     self.llm = None
                     print("Using simplified AI controller instead")
         
-        # Create prompt templates for decision making
+        # Enhanced prompt templates for decision making with LinkedIn context
         self.decision_prompt = PromptTemplate(
             input_variables=["page_content", "current_state"],
             template="""
-            You are an AI agent browsing LinkedIn. Given the current page content and state,
-            decide what action to take next.
+            You are an AI agent browsing LinkedIn, specifically focusing on alumni and school pages. 
+            Given the current page content and state, decide what action to take next.
             
             Current page content: {page_content}
             Current state: {current_state}
             
+            Context about LinkedIn pages:
+            1. School alumni pages show lists of people associated with the institution
+            2. Profile cards typically contain name, title, current employer, and sometimes location
+            3. These cards often have a consistent structure but may vary in exact class names
+            4. Profile cards are usually wrapped in a container with class names like "artdeco-entity-lockup"
+            
             Possible actions:
-            1. scroll
-            2. click [selector]
-            3. extract [data_type]
-            4. wait
+            1. scroll (to load more profiles)
+            2. click [selector] (to navigate to a profile or section)
+            3. extract [data_type] (to get information from the current view)
+            4. wait (to allow page elements to load)
+            5. visit_profile [url] (to visit a person's profile page)
+            6. back (to navigate back to previous page)
             
             Your decision (just return the action):
             """
         )
         
-        # Create prompt template for element identification
+        # Enhanced prompt template for element identification for LinkedIn
         self.element_prompt = PromptTemplate(
             input_variables=["page_content", "data_type"],
             template="""
@@ -84,7 +92,33 @@ class AIController:
             
             Page content: {page_content}
             
+            LinkedIn commonly uses these patterns:
+            - Names: .artdeco-entity-lockup__title, .org-people-profile-card__profile-title
+            - Titles: .artdeco-entity-lockup__subtitle, .org-people-profile-card__profile-subtitle
+            - Companies: .artdeco-entity-lockup__caption, .org-people-profile-card__profile-info
+            - Profile Cards: .artdeco-entity-lockup, .org-people-profile-card, .search-result__info
+            
             CSS selector for {data_type}:
+            """
+        )
+        
+        # New prompt template for profile page analysis
+        self.profile_page_prompt = PromptTemplate(
+            input_variables=["page_content"],
+            template="""
+            Analyze this LinkedIn profile page content to extract the following information:
+            1. Current employer/company name
+            2. Job title
+            3. Location
+             4. Years of experience (if available)
+            
+            Page content: {page_content}
+            
+            Return only the extracted information in this format:
+            employer: [company name]
+            job_title: [job title]
+            location: [location]
+            experience_years: [years]
             """
         )
         
@@ -149,6 +183,56 @@ class AIController:
             # Simple fallback selectors if model isn't available
             return self.fallback_selectors(data_type)
     
+    def analyze_profile_containers(self, page_html):
+        """Analyze the page HTML to identify the structure of profile containers"""
+        if self.llm:
+            try:
+                profile_analysis_prompt = PromptTemplate(
+                    input_variables=["page_html"],
+                    template="""
+                    Analyze this LinkedIn page HTML and identify the structure of PEOPLE profile cards.
+                    
+                    HTML fragment: {page_html}
+                    
+                    IMPORTANT: Focus ONLY on containers that represent individual PEOPLE profiles.
+                    Ignore organizational pages, company profiles, or "People also viewed" sections.
+                    
+                    Look specifically for elements containing:
+                    - Person's name (first and last)
+                    - Person's title/occupation
+                    - Person's current employer
+                    
+                    Return your analysis in this format:
+                    container_selector: [your selector]
+                    name_selector: [your selector]
+                    title_selector: [your selector]
+                    company_selector: [your selector]
+                    """
+                )
+                
+                analysis_chain = LLMChain(llm=self.llm, prompt=profile_analysis_prompt)
+                analysis = analysis_chain.run(page_html=page_html[:3000])  # Limit to avoid token issues
+                
+                # Parse the results
+                result = {}
+                for line in analysis.strip().split('\n'):
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        result[key.strip()] = value.strip()
+                
+                return result
+            except Exception as e:
+                print(f"Error in AI container analysis: {e}")
+                return {}
+        else:
+            # Improved fallback selectors specifically for LinkedIn people cards
+            return {
+                "container_selector": ".search-result__wrapper",
+                "name_selector": ".actor-name",
+                "title_selector": ".search-result__info .subline-level-1",
+                "company_selector": ".search-result__info .subline-level-2"
+            }
+    
     def fallback_selectors(self, data_type):
         """Provide fallback selectors for LinkedIn elements"""
         # These selectors may need to be updated based on LinkedIn's current layout
@@ -156,7 +240,7 @@ class AIController:
             "name": "h1.text-heading-xlarge",
             "job_title": "div.text-body-medium",
             "company": "span.text-body-small:nth-child(1)",
-            "location": "span.text-body-small:nth-child(2)",
+            "location": "span.text-body-small:nth-child(2)",  # Fixed syntax error here
             "about": "section.summary div.display-flex p",
             "experience": "section.experience h3",
             "education": "section.education h3",
