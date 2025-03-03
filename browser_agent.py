@@ -97,7 +97,7 @@ class BrowserAgent:
                 print(f"Login attempt {attempt+1}/{max_retries}")
                 
                 # First check if we're already logged in by visiting the feed page
-                self.page.goto('https://www.linkedin.com/feed/', timeout=30000)
+                self.page.goto('https://www.linkedin.com/feed/', timeout=60000)
                 self.human.delay()
                 
                 # If we're already on the feed, we're logged in
@@ -106,7 +106,7 @@ class BrowserAgent:
                     return True
                     
                 # Otherwise, go to login page
-                self.page.goto('https://www.linkedin.com/login', timeout=30000)
+                self.page.goto('https://www.linkedin.com/login', timeout=60000)
                 self.human.delay(2, 4)  # Longer delay to ensure page loads
                 
                 # Take screenshot for debugging
@@ -190,7 +190,7 @@ class BrowserAgent:
         """Navigate to a LinkedIn page with retry logic"""
         for attempt in range(max_retries):
             try:
-                self.page.goto(url, timeout=30000)  # 30 second timeout
+                self.page.goto(url, timeout=60000)  # 30 second timeout
                 self.human.delay(2, 4)
                 
                 # Check for rate limiting or security challenges

@@ -57,21 +57,44 @@ class HumanBehavior:
                 return True
         return False
     
-    def scroll(self, page, distance=None):
-        """Perform human-like scrolling"""
+    def scroll(self, page, distance=None, smooth=True):
+        """Perform human-like scrolling with improved smoothness"""
         if distance is None:
-            # Random scroll distance
-            distance = random.randint(100, 500)
+            # Random scroll distance with more variation
+            distance = random.randint(200, 1000)
         
-        # Break the scroll into multiple smaller scrolls
-        scroll_steps = random.randint(3, 8)
-        for _ in range(scroll_steps):
-            step_distance = distance / scroll_steps
-            # Add some randomness to each step
-            step_distance += random.uniform(-10, 10)
+        if smooth:
+            # Much smoother scrolling with more steps and natural easing
+            scroll_steps = random.randint(15, 25)  # Increased steps for smoothness
             
-            page.mouse.wheel(0, step_distance)
-            self.delay(0.1, 0.4)
+            # Use easing function for more natural movement
+            for i in range(scroll_steps):
+                progress = i / (scroll_steps - 1)
+                # Easing function: ease in and out
+                eased_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
+                
+                # Calculate step distance with easing
+                current_step = distance * (eased_progress - (0 if i == 0 else (i - 1) / (scroll_steps - 1)))
+                
+                # Add subtle randomness
+                current_step += random.uniform(-5, 5)
+                
+                # Perform the scroll
+                page.mouse.wheel(0, current_step)
+                
+                # Variable delay between scroll steps
+                time.sleep(random.uniform(0.01, 0.05))
+            
+            # Pause briefly after scrolling
+            self.delay(0.3, 0.7)
+        else:
+            # Original scrolling behavior as fallback
+            scroll_steps = random.randint(3, 8)
+            for _ in range(scroll_steps):
+                step_distance = distance / scroll_steps
+                step_distance += random.uniform(-10, 10)
+                page.mouse.wheel(0, step_distance)
+                self.delay(0.1, 0.4)
     
     def type_text(self, page, selector, text):
         """Type text with human-like timing"""

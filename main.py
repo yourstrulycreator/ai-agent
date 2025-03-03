@@ -6,6 +6,7 @@ from browser_agent import BrowserAgent
 from ai_controller import AIController
 from data_extractor import DataExtractor
 from human_behavior import HumanBehavior
+from screen_recorder import ScreenRecorder
 
 def main():
     print("Starting LinkedIn AI Agent...")
@@ -14,11 +15,20 @@ def main():
     os.makedirs("output", exist_ok=True)
     os.makedirs("data", exist_ok=True)
     
-    # Initialize components
-    browser = BrowserAgent(headless=config.HEADLESS)
-    browser.start()
+    # Initialize screen recorder
+    recorder = ScreenRecorder()
+    recording_active = False
     
     try:
+        # Start screen recording if requested
+        if config.RECORD_SCREEN:
+            recording_active = recorder.start()
+            print("Screen recording started")
+    
+        # Initialize components
+        browser = BrowserAgent(headless=config.HEADLESS)
+        browser.start()
+        
         # Increase page load timeout
         browser.page.set_default_timeout(120000)  # Increase to 120 seconds
         browser.page.set_default_navigation_timeout(120000)
@@ -78,12 +88,12 @@ def main():
                 human.delay(2, 4)  # Random delay before actions
                 
                 # Take a screenshot for reference
-                try:
-                    screenshot_path = f"output/profile_{url_index + 1}.png"
-                    browser.take_screenshot(screenshot_path)
-                    print(f"Screenshot saved to {screenshot_path}")
-                except Exception as e:
-                    print(f"Failed to take screenshot: {e}")
+                #try:
+                    #screenshot_path = f"output/profile_{url_index + 1}.png"
+                    #browser.take_screenshot(screenshot_path)
+                    #print(f"Screenshot saved to {screenshot_path}")
+                #except Exception as e:
+                #    print(f"Failed to take screenshot: {e}")
                     # Continue execution even if screenshot fails
                 
                 # Simulate human scrolling
@@ -93,26 +103,84 @@ def main():
                 # Extract profile data
                 people_data = extractor.extract_people_data(url)
                 
-                # Process and validate extracted profiles
-                valid_profiles = []
-                for profile in people_data:
-                    if profile.get('first_name') and profile.get('last_name'):
-                        valid_profiles.append(profile)
-                        print(f"Data extracted for: {profile['first_name']} {profile['last_name']}")
-                        
-                        # Save individual profiles
-                        extractor.save_to_csv([profile], config.OUTPUT_CSV)
-                        extractor.save_to_json([profile], config.OUTPUT_JSON)
-                        
-                        successful_extractions += 1
+                # Make sure people_data is not None before processing
+                if people_data:
+                    print(f"Found {len(people_data)} profiles to process")
                     
+                    # Process and validate extracted profiles
+                    valid_profiles = []
+                    for profile in people_data:
+                        # Skip LinkedIn Member profiles (usually private)
+                        if profile.get('first_name') == 'LinkedIn' and profile.get('last_name') == 'Member':
+                            continue
+                            
+                        # Validate individual profiles
+                        if profile.get('first_name') and profile.get('last_name'):
+                            valid_profiles.append(profile)
+                            print(f"Data extracted for: {profile['first_name']} {profile['last_name']}")
+                            
+                            # Visit the profile if URL is available
+                            if profile.get('linkedin_url'):
+                                try:
+                                    print(f"Visiting profile: {profile['linkedin_url']}")
+                                    
+                                    # Navigate to the profile
+                                    browser.navigate_to(profile['linkedin_url'])
+                                    
+                                    # Simulate human-like behavior while viewing the profile
+                                    human.delay(1, 2)  # Initial pause to look at the page
+                                    
+                                    # Take a screenshot of the profile
+                                    #profile_screenshot = f"output/profile_{profile['first_name']}_{profile['last_name']}.png"
+                                    #browser.take_screenshot(profile_screenshot)
+                                    
+                                    # Scroll down slowly to view the profile
+                                    for _ in range(3):  # Scroll a few times
+                                        human.scroll(browser.page, smooth=True)
+                                        human.delay(1, 2)  # Pause between scrolls
+
+                                    # Add extra wait time before extraction to ensure all content is loaded
+                                    browser.page.wait_for_timeout(5000)  # Increased to 5 seconds
+                                    
+                                    # Extract employer information from the profile page
+                                    profile_content = browser.get_page_content()
+                                    
+                                    # Extract both employer and job title information
+                                    employer_info = extractor.extract_employer_from_profile(profile_content)
+                                    job_title = extractor.extract_job_title_from_profile(profile_content)
+                                    
+                                    if employer_info:
+                                        profile['employer'] = employer_info
+                                        print(f"Extracted employer: {employer_info}")
+                                    
+                                    if job_title:
+                                        profile['title'] = job_title
+                                        print(f"Extracted job title: {job_title}")
+                                    
+                                    # Navigate back to the search results
+                                    browser.navigate_to(url)
+                                    human.delay(2, 3)  # Wait for page to load
+                                    
+                                except Exception as e:
+                                    print(f"Error visiting profile: {e}")
+                            
+                            # Save individual profiles - IMPORTANT: Save even if URL visit fails
+                            extractor.save_to_csv([profile], config.OUTPUT_CSV)
+                            extractor.save_to_json([profile], config.OUTPUT_JSON)
+                            
+                            successful_extractions += 1
+                    
+                    print(f"Successfully extracted {successful_extractions} profiles")
+                else:
+                    print("No profiles were extracted")
+                
                 # Simulate human-like behavior between profiles
                 human.delay(3, 8)
                 
             except Exception as e:
                 print(f"Error processing {url}: {e}")
                 continue
-        
+    
         print(f"\nProcessing complete. Successfully extracted {successful_extractions} profiles.")
         
     except Exception as e:
