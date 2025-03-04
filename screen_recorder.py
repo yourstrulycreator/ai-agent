@@ -15,7 +15,7 @@ class ScreenRecorder:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
     
-    def start(self, fps=10.0):
+    def start(self, fps=20.0):
         """Start screen recording"""
         if self.recording:
             print("Recording is already in progress")
@@ -31,7 +31,8 @@ class ScreenRecorder:
             self.filename = os.path.join(self.output_dir, f"linkedin_agent_{timestamp}.mp4")
             
             # Define the codec and create VideoWriter object
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            # Use XVID codec instead of mp4v for better compatibility
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
             self.writer = cv2.VideoWriter(self.filename, fourcc, fps, (width, height))
             
             self.recording = True
@@ -55,8 +56,8 @@ class ScreenRecorder:
             # Convert to numpy array
             frame = np.array(screenshot)
             
-            # Convert from BGR to RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Convert from RGB to BGR (OpenCV uses BGR)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             
             # Write frame
             self.writer.write(frame)
@@ -67,16 +68,26 @@ class ScreenRecorder:
             print(f"Error capturing frame: {e}")
             return False
     
-    def record(self, duration=60):
+    def record(self, duration=60, fps=20.0):
         """Record for a specific duration in seconds"""
-        if not self.start():
+        if not self.start(fps=fps):
             return False
         
         try:
             start_time = time.time()
+            frame_time = 1.0 / fps
+            next_frame_time = start_time
+            
             while time.time() - start_time < duration:
-                self.capture_frame()
-                time.sleep(0.1)  # This fixed sleep time might cause frame rate issues
+                current_time = time.time()
+                
+                if current_time >= next_frame_time:
+                    self.capture_frame()
+                    # Calculate next frame time accounting for processing delays
+                    next_frame_time = max(next_frame_time + frame_time, current_time)
+                else:
+                    # Small sleep to prevent CPU overuse
+                    time.sleep(0.001)
             
             self.stop()
             return True
@@ -102,3 +113,7 @@ class ScreenRecorder:
         except Exception as e:
             print(f"Error stopping recording: {e}")
             return False
+
+# Example usage:
+# recorder = ScreenRecorder()
+# recorder.record(duration=30, fps=20)

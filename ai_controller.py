@@ -303,7 +303,7 @@ class AIController:
                 client: Any = None  # Initialize with default value
                 model: str = ""     # Initialize with default value
                 
-                def __init__(self, api_key, model="qwen/qwen-2.5-coder-32b-instruct:free"):
+                def __init__(self, api_key, model="nousresearch/deephermes-3-llama-3-8b-preview:free"): #moonshotai/moonlight-16b-a3b-instruct:free | qwen/qwen-2.5-coder-32b-instruct:free
                     super().__init__()
                     self.client = OpenAI(
                         base_url="https://openrouter.ai/api/v1",

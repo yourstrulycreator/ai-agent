@@ -17,7 +17,7 @@ def main():
     
     # Initialize screen recorder
     recorder = ScreenRecorder()
-    recording_active = False
+    recording_active = True
     
     try:
         # Start screen recording if requested
@@ -42,11 +42,15 @@ def main():
     
     except Exception as e:
         print(f"Error during initialization: {e}")
-        browser.close()
+        if recording_active:
+            recorder.stop()
+        if 'browser' in locals() and browser:
+            browser.close()
         return
     
     # Track successful extractions
     successful_extractions = 0
+    last_frame_time = time.time()
     
     try:
         # Login to LinkedIn (if credentials are provided)
@@ -55,7 +59,16 @@ def main():
             try:
                 # Add delay before login attempt
                 time.sleep(3)
+                
+                # Capture frame before login attempt
+                if recording_active:
+                    recorder.capture_frame()
+                
                 login_success = browser.login(config.LINKEDIN_USERNAME, config.LINKEDIN_PASSWORD)
+                
+                # Capture frame after login attempt
+                if recording_active:
+                    recorder.capture_frame()
                 
                 if not login_success:
                     print("Login unsuccessful. Continuing without login...")
@@ -64,18 +77,26 @@ def main():
                     except Exception as e:
                         print(f"Failed to take login failure screenshot: {e}")
                     browser.close()
+                    if recording_active:
+                        recorder.stop()
                     return
             except Exception as e:
                 print(f"Login process failed: {e}")
                 browser.close()
+                if recording_active:
+                    recorder.stop()
                 return
             
             if not login_success:
                 print("Login unsuccessful. Continuing without login...")
                 browser.take_screenshot("output/login_failed.png")
+                if recording_active:
+                    recorder.stop()
                 return  # Exit if login fails
         else:
             print("No credentials provided. Continuing without login...")
+            if recording_active:
+                recorder.stop()
             return  # Exit if no credentials
         
         # Process each target URL
@@ -86,6 +107,10 @@ def main():
                 # Navigate to the profile with human-like behavior
                 browser.navigate_to(url)
                 human.delay(2, 4)  # Random delay before actions
+                
+                # Capture frame after navigation
+                if recording_active:
+                    recorder.capture_frame()
                 
                 # Take a screenshot for reference
                 #try:
@@ -99,6 +124,10 @@ def main():
                 # Simulate human scrolling
                 human.scroll(browser.page)
                 human.delay(1, 2)
+                
+                # Capture frame after scrolling
+                if recording_active:
+                    recorder.capture_frame()
                 
                 # Extract profile data
                 people_data = extractor.extract_people_data(url)
@@ -127,6 +156,10 @@ def main():
                                     # Navigate to the profile
                                     browser.navigate_to(profile['linkedin_url'])
                                     
+                                    # Capture frame after profile navigation
+                                    if recording_active:
+                                        recorder.capture_frame()
+                                    
                                     # Simulate human-like behavior while viewing the profile
                                     human.delay(1, 2)  # Initial pause to look at the page
                                     
@@ -138,9 +171,18 @@ def main():
                                     for _ in range(3):  # Scroll a few times
                                         human.scroll(browser.page, smooth=True)
                                         human.delay(1, 2)  # Pause between scrolls
+                                        
+                                        # Capture frame during scrolling (not every scroll to avoid too many frames)
+                                        if recording_active and time.time() - last_frame_time > 2:
+                                            recorder.capture_frame()
+                                            last_frame_time = time.time()
 
                                     # Add extra wait time before extraction to ensure all content is loaded
                                     browser.page.wait_for_timeout(5000)  # Increased to 5 seconds
+                                    
+                                    # Capture frame before extraction
+                                    if recording_active:
+                                        recorder.capture_frame()
                                     
                                     # Extract employer information from the profile page
                                     profile_content = browser.get_page_content()
@@ -161,6 +203,10 @@ def main():
                                     browser.navigate_to(url)
                                     human.delay(2, 3)  # Wait for page to load
                                     
+                                    # Capture frame after returning to search results
+                                    if recording_active:
+                                        recorder.capture_frame()
+                                    
                                 except Exception as e:
                                     print(f"Error visiting profile: {e}")
                             
@@ -179,6 +225,9 @@ def main():
                 
             except Exception as e:
                 print(f"Error processing {url}: {e}")
+                # Capture frame when error occurs
+                if recording_active:
+                    recorder.capture_frame()
                 continue
     
         print(f"\nProcessing complete. Successfully extracted {successful_extractions} profiles.")
@@ -187,6 +236,11 @@ def main():
         print(f"Error in main execution: {e}")
     finally:
         try:
+            # Stop screen recording if active
+            if recording_active:
+                recorder.stop()
+                print("Screen recording stopped")
+                
             # Always close the browser
             if browser and browser.page:
                 browser.close()

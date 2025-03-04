@@ -1239,37 +1239,51 @@ class DataExtractor:
     
     def save_to_csv(self, data, filename):
         """Save extracted data to a CSV file, handling both single items and lists"""
-        if not data:
-            print("No data to save to CSV")
-            return
-            
-        # Ensure data is a list
-        data_list = data if isinstance(data, list) else [data]
-        if not data_list:
-            print("Empty data list, nothing to save to CSV")
-            return
-            
-        # Get fieldnames from the first item
-        fieldnames = data_list[0].keys() if data_list and isinstance(data_list[0], dict) else []
-        if not fieldnames:
-            print("No fields found in data, can't save to CSV")
-            return
-        
-        file_exists = os.path.isfile(filename)
-        
-        with open(filename, 'a', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            
-            # Write header if file is empty or doesn't exist
-            if not file_exists:
-                writer.writeheader()
+        try:
+            # Ensure data is valid
+            if not data:
+                print("No data to save to CSV")
+                return
                 
-            # Write all records
-            for item in data_list:
-                writer.writerow(item)
+            # Create a set of existing profile URLs to check for duplicates
+            existing_urls = set()
+            if os.path.isfile(filename):
+                with open(filename, 'r', encoding='utf-8', newline='') as file:
+                    reader = csv.reader(file)
+                    for row in reader:
+                        if len(row) >= 6:  # Ensure row has enough columns
+                            existing_urls.add(row[5])  # LinkedIn URL is in column 6
+            
+            # Prepare data for writing
+            rows_to_write = []
+            if isinstance(data, list):
+                for profile in data:
+                    # Skip if this URL already exists in the file
+                    if profile.get('linkedin_url') in existing_urls:
+                        print(f"Skipping duplicate profile: {profile.get('first_name')} {profile.get('last_name')}")
+                        continue
+                    rows_to_write.append(self._profile_to_row(profile))
+            else:
+                # Skip if this URL already exists in the file
+                if data.get('linkedin_url') not in existing_urls:
+                    rows_to_write.append(self._profile_to_row(data))
+                else:
+                    print(f"Skipping duplicate profile: {data.get('first_name')} {data.get('last_name')}")
+                    
+            # If we have new data to write
+            if rows_to_write:
+                # Append to existing file or create new one
+                with open(filename, 'a', encoding='utf-8', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerows(rows_to_write)
+                    
+                print(f"Data saved to CSV: {filename} ({len(rows_to_write)} new profiles)")
+            else:
+                print("No new profiles to add to CSV")
                 
-            print(f"Data saved to CSV: {filename} ({len(data_list)} records)")
-    
+        except Exception as e:
+            print(f"Error saving to CSV: {e}")
+
     def save_to_json(self, data, filename):
         """Save extracted data to a JSON file, handling both single items and lists"""
         try:
@@ -1292,7 +1306,11 @@ class DataExtractor:
             if not isinstance(existing_data, list):
                 existing_data = [existing_data]
                 
+            # Create a set of existing profile URLs for quick lookup
+            existing_urls = {profile.get('linkedin_url', '') for profile in existing_data}
+            
             # Add new data to existing data
+            new_profiles_count = 0
             if isinstance(data, list):
                 # Ensure all profiles have the correct structure
                 for profile in data:
@@ -1300,19 +1318,36 @@ class DataExtractor:
                     if 'title' in profile and 'description' not in profile:
                         profile['description'] = profile['title']
                         profile['title'] = ""  # Reset title as it will be filled during profile visit
-                existing_data.extend(data)
+                    
+                    # Skip if this URL already exists
+                    if profile.get('linkedin_url') in existing_urls:
+                        print(f"Skipping duplicate profile: {profile.get('first_name')} {profile.get('last_name')}")
+                        continue
+                        
+                    existing_data.append(profile)
+                    existing_urls.add(profile.get('linkedin_url', ''))
+                    new_profiles_count += 1
             else:
-                # Handle single profile
-                if 'title' in data and 'description' not in data:
-                    data['description'] = data['title']
-                    data['title'] = ""
-                existing_data.append(data)
+                # Skip if this URL already exists
+                if data.get('linkedin_url') not in existing_urls:
+                    # If profile has 'title' but no 'description', copy title to description
+                    if 'title' in data and 'description' not in data:
+                        data['description'] = data['title']
+                        data['title'] = ""  # Reset title as it will be filled during profile visit
+                    existing_data.append(data)
+                    new_profiles_count += 1
+                else:
+                    print(f"Skipping duplicate profile: {data.get('first_name')} {data.get('last_name')}")
             
-            # Write back to file with proper indentation for readability
-            with open(filename, 'w', encoding='utf-8') as file:
-                json.dump(existing_data, file, indent=2, ensure_ascii=False)
+            # Only write to file if we have new data
+            if new_profiles_count > 0:
+                # Write updated data back to file
+                with open(filename, 'w', encoding='utf-8') as file:
+                    json.dump(existing_data, file, indent=2, ensure_ascii=False)
+                    
+                print(f"Data saved to JSON: {filename} ({new_profiles_count} new profiles)")
+            else:
+                print("No new profiles to add to JSON")
                 
-            print(f"Data saved to JSON: {filename} ({len(existing_data)} total records)")
-            
         except Exception as e:
             print(f"Error saving to JSON: {e}")
