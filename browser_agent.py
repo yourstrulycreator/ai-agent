@@ -289,3 +289,62 @@ class BrowserAgent:
             self.browser.close()
         if self.playwright:
             self.playwright.stop()
+
+
+def find_and_scroll_to_profile(self, profile_name):
+    """Find a profile by name and scroll to it with visible cursor movement"""
+    try:
+        # Try different selectors that might contain the profile name
+        selectors = [
+            ".entity-result__title-text",
+            ".search-result__info .actor-name",
+            ".org-people-profile-card__profile-title",
+            ".artdeco-entity-lockup__title"
+        ]
+        
+        found_element = None
+        
+        # Try each selector
+        for selector in selectors:
+            elements = self.page.query_selector_all(selector)
+            for element in elements:
+                text = element.inner_text().strip()
+                if profile_name.lower() in text.lower():
+                    found_element = element
+                    break
+            if found_element:
+                break
+        
+        if found_element:
+            # Get element position
+            bbox = found_element.bounding_box()
+            if bbox:
+                # Calculate center of element
+                x = bbox["x"] + bbox["width"] / 2
+                y = bbox["y"] + bbox["height"] / 2
+                
+                # First scroll element into view with a smooth scroll
+                self.page.evaluate("""(y) => {
+                    window.scrollTo({
+                        top: y - (window.innerHeight / 2),
+                        behavior: 'smooth'
+                    });
+                }""", y)
+                
+                # Wait for scroll to complete
+                self.human.delay(1, 2)
+                
+                # Then move cursor to the element with visible movement
+                self.human.move_mouse(self.page, x, y, steps=25)  # Increased steps for more visible movement
+                
+                # Optional: Highlight with a brief hover
+                self.human.delay(0.5, 1)
+                
+                return True
+        
+        print(f"Could not find element for profile: {profile_name}")
+        return False
+        
+    except Exception as e:
+        print(f"Error scrolling to profile: {e}")
+        return False

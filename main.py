@@ -138,7 +138,7 @@ def main():
                     
                     # Process and validate extracted profiles
                     valid_profiles = []
-                    for profile in people_data:
+                    for profile_index, profile in enumerate(people_data):
                         # Skip LinkedIn Member profiles (usually private)
                         if profile.get('first_name') == 'LinkedIn' and profile.get('last_name') == 'Member':
                             continue
@@ -202,6 +202,22 @@ def main():
                                     # Navigate back to the search results
                                     browser.navigate_to(url)
                                     human.delay(2, 3)  # Wait for page to load
+                                    
+                                    # NEW CODE: Scroll to the position of the next profile if available
+                                    if profile_index < len(people_data) - 1:
+                                        # Try to find the next profile's element to scroll to
+                                        next_profile_name = f"{people_data[profile_index + 1].get('first_name', '')} {people_data[profile_index + 1].get('last_name', '')}".strip()
+                                        if next_profile_name:
+                                            print(f"Scrolling to next profile: {next_profile_name}")
+                                            
+                                            # First, perform a general scroll to approximate position
+                                            scroll_amount = (profile_index + 1) * 300  # Rough estimate of profile card height
+                                            human.scroll(browser.page, distance=scroll_amount, smooth=True)
+                                            human.delay(1, 2)
+                                            
+                                            # Then try to find and scroll to the specific element
+                                            # This uses a more visible cursor movement to the next profile
+                                            browser.find_and_scroll_to_profile(next_profile_name)
                                     
                                     # Capture frame after returning to search results
                                     if recording_active:

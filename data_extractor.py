@@ -14,6 +14,7 @@ class DataExtractor:
         
     def extract_people_data(self, people_url):
         """Extract people data from a LinkedIn school's people page using improved AI analysis"""
+
         # Navigate to the URL
         self.browser.navigate_to(people_url)
         print(f"Navigated to school people page: {people_url}")
@@ -186,6 +187,11 @@ class DataExtractor:
                     if not url.startswith(("http://", "https://")):
                         url = f"https://www.linkedin.com{url if url.startswith('/') else '/' + url}"
                     
+                    # Check if this profile URL already exists in your dataset before navigating
+                    if self._is_profile_already_saved(url):
+                        print(f"Skipping already processed profile: {url}")
+                        continue
+                    
                     print(f"Visiting profile {idx+1}/{max_profiles_to_visit}: {url}")
                     
                     # Make sure we have the correct URL in the profile data before attempting to visit
@@ -333,6 +339,28 @@ class DataExtractor:
         except Exception as e:
             print(f"Error in profile extraction: {e}")
             return []
+
+
+    def _is_profile_already_saved(self, profile_url, filename="output/linkedin_data.json"):
+        """Check if a profile URL already exists in the saved data"""
+        try:
+            if not os.path.isfile(filename):
+                return False
+                
+            with open(filename, 'r', encoding='utf-8') as file:
+                try:
+                    existing_data = json.load(file)
+                    if not isinstance(existing_data, list):
+                        existing_data = [existing_data]
+                        
+                    # Check if URL exists in the data
+                    existing_urls = {profile.get('linkedin_url', '') for profile in existing_data}
+                    return profile_url in existing_urls
+                except json.JSONDecodeError:
+                    return False
+        except Exception as e:
+            print(f"Error checking for existing profile: {e}")
+            return False
     
     def _extract_profile_url_from_container(self, container):
         """Extract LinkedIn profile URL from a container element with improved detection"""
